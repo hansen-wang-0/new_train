@@ -41,10 +41,67 @@ const describeLexicon = [
   }
 ];
 
-const associationWords = [
-  "牙刷", "地铁", "窗帘", "云", "台灯", "便利店", "电梯", "耳机",
-  "路灯", "外卖", "工牌", "鱼缸", "保温杯", "楼梯", "闹钟", "鞋带",
-  "键盘", "雨伞", "毛衣", "月亮", "公交站", "冰箱", "口罩", "自动门"
+const associationPools = {
+  objects: [
+    "牙刷", "地铁闸机", "窗帘", "台灯", "便利店收银台", "电梯", "耳机", "路灯",
+    "外卖袋", "工牌", "鱼缸", "保温杯", "楼梯", "闹钟", "鞋带", "键盘",
+    "雨伞", "毛衣", "月亮", "公交站牌", "冰箱", "口罩", "自动门", "探照灯"
+  ],
+  places: [
+    "写字楼", "出租屋", "医院走廊", "高铁站", "家长群", "直播间", "会议室", "夜路",
+    "商场洗手间", "便利店门口", "开放工位", "老小区"
+  ],
+  emotions: [
+    "焦虑", "羞耻感", "归属感", "心虚", "愤怒", "羡慕", "委屈", "松一口气",
+    "孤独", "厌倦", "嫉妒", "安全感"
+  ],
+  sensations: [
+    "钝感", "窒息感", "失重感", "发麻", "眩晕", "刺痛", "迟钝", "饱胀感",
+    "轻盈", "悬着", "卡住", "回暖"
+  ],
+  concepts: [
+    "父权制", "性别歧视", "阶层跃迁", "消费主义", "控制欲", "边界感", "规训", "偏见",
+    "沉默成本", "表演欲", "自我怀疑", "内卷", "人情", "面子", "算法推荐", "情绪价值"
+  ],
+  systems: [
+    "绩效考核", "亲密关系", "社交规则", "舆论场", "平台机制", "家庭结构", "职场礼貌", "流量逻辑",
+    "教育体系", "办公室政治", "身份认同", "向上社交"
+  ],
+  roles: [
+    "实习生", "母亲", "前任", "领导", "旁观者", "好学生", "出租车司机", "室友",
+    "陌生人", "女儿", "伴侣", "客服"
+  ],
+  actions: [
+    "等待", "逃跑", "解释", "讨好", "拒绝", "对齐", "拖延", "忍耐",
+    "切换", "围观", "复盘", "失控"
+  ],
+  states: [
+    "倦怠", "清醒", "断联", "拧巴", "上头", "麻木", "失语", "回避",
+    "松动", "停滞", "失衡", "过载"
+  ],
+  values: [
+    "自由", "体面", "秩序", "效率", "公平", "野心", "真诚", "稳定",
+    "亲密", "尊严", "松弛感", "存在感"
+  ]
+};
+
+const associationPairPatterns = [
+  ["objects", "concepts"],
+  ["objects", "emotions"],
+  ["objects", "systems"],
+  ["places", "concepts"],
+  ["places", "states"],
+  ["roles", "systems"],
+  ["roles", "emotions"],
+  ["actions", "objects"],
+  ["actions", "concepts"],
+  ["sensations", "values"],
+  ["sensations", "systems"],
+  ["states", "values"],
+  ["states", "objects"],
+  ["concepts", "concepts"],
+  ["concepts", "emotions"],
+  ["systems", "values"]
 ];
 
 const dom = {
@@ -409,15 +466,24 @@ function isAiEnabled() {
   return Boolean(config.enableAi && config.baseUrl && config.model && config.apiKey);
 }
 
-function pickAssociationPair() {
-  let first = associationWords[Math.floor(Math.random() * associationWords.length)];
-  let second = associationWords[Math.floor(Math.random() * associationWords.length)];
+function pickAssociationSeed(category, exclude) {
+  const pool = associationPools[category] || [];
+  const filtered = pool.filter((item) => item !== exclude);
+  const source = filtered.length ? filtered : pool;
+  return source[Math.floor(Math.random() * source.length)];
+}
 
-  while (second === first) {
-    second = associationWords[Math.floor(Math.random() * associationWords.length)];
+function pickAssociationPair() {
+  const pattern = associationPairPatterns[Math.floor(Math.random() * associationPairPatterns.length)];
+  const first = pickAssociationSeed(pattern[0]);
+  const second = pickAssociationSeed(pattern[1], first);
+  const pair = [first, second];
+
+  if (Math.random() > 0.5) {
+    pair.reverse();
   }
 
-  return [first, second];
+  return pair;
 }
 
 function updateAssociationPairUi() {
