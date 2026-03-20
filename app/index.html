@@ -93,6 +93,48 @@
           </p>
         </section>
 
+        <section class="panel config-panel">
+          <div class="panel-head">
+            <h2>微休息训练模式</h2>
+            <p>把这套训练器直接当作本地休息提醒来用。它会按固定间隔弹出小窗，先给你两个词，再在倒计时里揭晓提示和参考。</p>
+          </div>
+
+          <form id="trainer-form" class="grid-form">
+            <label>
+              <span>启用本地微休息</span>
+              <input id="trainer-enabled" type="checkbox" />
+            </label>
+            <label>
+              <span>间隔（分钟）</span>
+              <input id="trainer-interval" type="number" min="1" max="180" step="1" value="10" />
+            </label>
+            <label>
+              <span>训练时长（秒）</span>
+              <input id="trainer-duration" type="number" min="10" max="180" step="5" value="20" />
+            </label>
+            <label>
+              <span>几秒后自动出提示</span>
+              <input id="trainer-hint-delay" type="number" min="0" max="120" step="1" value="10" />
+            </label>
+            <label>
+              <span>几秒后自动出参考</span>
+              <input id="trainer-answer-delay" type="number" min="0" max="180" step="1" value="16" />
+            </label>
+            <label>
+              <span>推迟时长（分钟）</span>
+              <input id="trainer-snooze" type="number" min="1" max="60" step="1" value="2" />
+            </label>
+
+            <div class="config-actions">
+              <button type="submit" class="primary-button">保存训练节奏</button>
+              <button type="button" id="trainer-start-now" class="ghost-button">立即来一轮</button>
+              <button type="button" id="trainer-stop" class="ghost-button">停止计时</button>
+            </div>
+          </form>
+
+          <p id="trainer-status" class="small-status">当前未启用本地微休息训练。</p>
+        </section>
+
         <section class="panel">
           <div class="panel-head">
             <h2>描写扩展器</h2>
@@ -252,6 +294,36 @@
         <p></p>
       </article>
     </template>
+
+    <div id="trainer-overlay" class="trainer-overlay hidden-overlay" aria-hidden="true">
+      <div class="trainer-modal">
+        <p class="trainer-kicker">20 秒联想微休息</p>
+        <div class="trainer-countdown">
+          <strong id="trainer-countdown">20</strong>
+          <span>秒</span>
+        </div>
+        <div class="trainer-pair">
+          <span id="trainer-word-a" class="word-chip">词一</span>
+          <span class="word-separator">和</span>
+          <span id="trainer-word-b" class="word-chip">词二</span>
+        </div>
+        <p class="trainer-copy">先在脑子里搭桥。想一句话、一个比喻，或者一个很短的小故事都行。</p>
+        <div id="trainer-hint-box" class="trainer-box hidden-section">
+          <h3>提示</h3>
+          <p id="trainer-hint-text"></p>
+        </div>
+        <div id="trainer-answer-box" class="trainer-box hidden-section">
+          <h3>参考</h3>
+          <p id="trainer-answer-text"></p>
+        </div>
+        <div class="trainer-actions">
+          <button type="button" id="trainer-show-hint" class="ghost-button">显示提示</button>
+          <button type="button" id="trainer-show-answer" class="ghost-button">显示参考</button>
+          <button type="button" id="trainer-snooze-action" class="ghost-button">稍后再来</button>
+          <button type="button" id="trainer-complete" class="primary-button">这轮完成</button>
+        </div>
+      </div>
+    </div>
 
     <script src="./app.js"></script>
   </body>

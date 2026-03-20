@@ -149,6 +149,11 @@ h1 {
   display: none;
 }
 
+.hidden-overlay,
+.hidden-section {
+  display: none !important;
+}
+
 .layout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -316,6 +321,90 @@ textarea {
   letter-spacing: 0.08em;
 }
 
+.trainer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(34, 24, 17, 0.48);
+  backdrop-filter: blur(10px);
+}
+
+.trainer-modal {
+  width: min(720px, 100%);
+  padding: 28px;
+  border-radius: 28px;
+  background:
+    linear-gradient(135deg, rgba(255, 248, 240, 0.97), rgba(248, 235, 219, 0.96)),
+    var(--paper);
+  border: 1px solid rgba(114, 86, 62, 0.14);
+  box-shadow: 0 30px 80px rgba(52, 37, 27, 0.24);
+}
+
+.trainer-kicker {
+  margin: 0 0 12px;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.84rem;
+}
+
+.trainer-countdown {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.trainer-countdown strong {
+  font-size: clamp(2.8rem, 8vw, 5rem);
+  line-height: 1;
+}
+
+.trainer-pair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.trainer-copy {
+  margin: 0 0 16px;
+  color: var(--muted);
+  line-height: 1.7;
+  text-align: center;
+}
+
+.trainer-box {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 252, 247, 0.92);
+  border: 1px solid rgba(114, 86, 62, 0.12);
+}
+
+.trainer-box h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.trainer-box p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.74;
+  color: var(--muted);
+}
+
+.trainer-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
 .result-grid,
 .favorites-list,
 .history-list {
@@ -473,6 +562,16 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .trainer-modal {
+    padding: 20px;
+    border-radius: 22px;
+  }
+
+  .trainer-pair,
+  .trainer-actions {
+    align-items: stretch;
+  }
+
   .primary-button,
   .ghost-button,
   .save-chip {
@@ -481,6 +580,11 @@ textarea {
   }
 
   .association-head .ghost-button {
+    width: 100%;
+  }
+
+  .trainer-actions .primary-button,
+  .trainer-actions .ghost-button {
     width: 100%;
   }
 

@@ -2,7 +2,9 @@ const STORAGE_KEYS = {
   config: "interesting-lab-config",
   favorites: "interesting-lab-favorites",
   history: "interesting-lab-history",
-  state: "interesting-lab-state"
+  state: "interesting-lab-state",
+  trainerSettings: "interesting-lab-trainer-settings",
+  trainerRuntime: "interesting-lab-trainer-runtime"
 };
 
 const DEFAULT_CONFIG = {
@@ -12,6 +14,15 @@ const DEFAULT_CONFIG = {
   apiKey: "",
   temperature: 1.1,
   customPrompt: ""
+};
+
+const DEFAULT_TRAINER_SETTINGS = {
+  enabled: false,
+  intervalMinutes: 10,
+  durationSeconds: 20,
+  hintDelaySeconds: 10,
+  answerDelaySeconds: 16,
+  snoozeMinutes: 2
 };
 
 const describeLexicon = [
@@ -123,6 +134,16 @@ const dom = {
   testConfig: document.querySelector("#test-config"),
   clearConfig: document.querySelector("#clear-config"),
   configStatus: document.querySelector("#config-status"),
+  trainerForm: document.querySelector("#trainer-form"),
+  trainerEnabled: document.querySelector("#trainer-enabled"),
+  trainerInterval: document.querySelector("#trainer-interval"),
+  trainerDuration: document.querySelector("#trainer-duration"),
+  trainerHintDelay: document.querySelector("#trainer-hint-delay"),
+  trainerAnswerDelay: document.querySelector("#trainer-answer-delay"),
+  trainerSnooze: document.querySelector("#trainer-snooze"),
+  trainerStartNow: document.querySelector("#trainer-start-now"),
+  trainerStop: document.querySelector("#trainer-stop"),
+  trainerStatus: document.querySelector("#trainer-status"),
   installApp: document.querySelector("#install-app"),
   installTip: document.querySelector("#install-tip"),
   describeForm: document.querySelector("#describe-form"),
@@ -149,7 +170,19 @@ const dom = {
   historyOutput: document.querySelector("#history-output"),
   exportHistory: document.querySelector("#export-history"),
   clearHistory: document.querySelector("#clear-history"),
-  resultCardTemplate: document.querySelector("#result-card-template")
+  resultCardTemplate: document.querySelector("#result-card-template"),
+  trainerOverlay: document.querySelector("#trainer-overlay"),
+  trainerCountdown: document.querySelector("#trainer-countdown"),
+  trainerWordA: document.querySelector("#trainer-word-a"),
+  trainerWordB: document.querySelector("#trainer-word-b"),
+  trainerHintBox: document.querySelector("#trainer-hint-box"),
+  trainerHintText: document.querySelector("#trainer-hint-text"),
+  trainerAnswerBox: document.querySelector("#trainer-answer-box"),
+  trainerAnswerText: document.querySelector("#trainer-answer-text"),
+  trainerShowHint: document.querySelector("#trainer-show-hint"),
+  trainerShowAnswer: document.querySelector("#trainer-show-answer"),
+  trainerSnoozeAction: document.querySelector("#trainer-snooze-action"),
+  trainerComplete: document.querySelector("#trainer-complete")
 };
 
 const currentSourceState = {
@@ -161,6 +194,11 @@ const currentSourceState = {
 let currentPair = pickAssociationPair();
 let deferredInstallPrompt = null;
 let vaultAssociationTerms = [];
+let trainerBreakTimerId = null;
+let trainerCountdownTimerId = null;
+let trainerHintTimerId = null;
+let trainerAnswerTimerId = null;
+let trainerSession = null;
 
 function readLocalStorage(key, fallback) {
   try {
@@ -218,6 +256,40 @@ function getConfig() {
 
 function setConfig(config) {
   writeLocalStorage(STORAGE_KEYS.config, normalizeConfig(config));
+}
+
+function normalizeTrainerSettings(settings) {
+  const next = {
+    ...DEFAULT_TRAINER_SETTINGS,
+    ...(settings || {})
+  };
+
+  next.enabled = Boolean(next.enabled);
+  next.intervalMinutes = Math.min(180, Math.max(1, Number(next.intervalMinutes) || DEFAULT_TRAINER_SETTINGS.intervalMinutes));
+  next.durationSeconds = Math.min(180, Math.max(10, Number(next.durationSeconds) || DEFAULT_TRAINER_SETTINGS.durationSeconds));
+  next.hintDelaySeconds = Math.max(0, Number(next.hintDelaySeconds) || 0);
+  next.answerDelaySeconds = Math.max(0, Number(next.answerDelaySeconds) || 0);
+  next.snoozeMinutes = Math.min(60, Math.max(1, Number(next.snoozeMinutes) || DEFAULT_TRAINER_SETTINGS.snoozeMinutes));
+  return next;
+}
+
+function getTrainerSettings() {
+  return normalizeTrainerSettings(readLocalStorage(STORAGE_KEYS.trainerSettings, DEFAULT_TRAINER_SETTINGS));
+}
+
+function setTrainerSettings(settings) {
+  writeLocalStorage(STORAGE_KEYS.trainerSettings, normalizeTrainerSettings(settings));
+}
+
+function getTrainerRuntime() {
+  return readLocalStorage(STORAGE_KEYS.trainerRuntime, {
+    nextBreakAt: null,
+    lastCompletedAt: null
+  });
+}
+
+function setTrainerRuntime(runtime) {
+  writeLocalStorage(STORAGE_KEYS.trainerRuntime, runtime);
 }
 
 function getFavorites() {
@@ -315,6 +387,56 @@ function updateConfigStatus(message) {
 
 function syncTemperatureLabel(value) {
   dom.temperatureValue.textContent = Number(value).toFixed(1);
+}
+
+function formatRelativeMs(ms) {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (!minutes) {
+    return `${seconds} 秒后`;
+  }
+
+  return `${minutes} 分 ${seconds} 秒后`;
+}
+
+function applyTrainerSettingsToForm() {
+  const settings = getTrainerSettings();
+  dom.trainerEnabled.checked = settings.enabled;
+  dom.trainerInterval.value = String(settings.intervalMinutes);
+  dom.trainerDuration.value = String(settings.durationSeconds);
+  dom.trainerHintDelay.value = String(settings.hintDelaySeconds);
+  dom.trainerAnswerDelay.value = String(settings.answerDelaySeconds);
+  dom.trainerSnooze.value = String(settings.snoozeMinutes);
+  updateTrainerStatus();
+}
+
+function updateTrainerStatus(message) {
+  if (message) {
+    dom.trainerStatus.textContent = message;
+    return;
+  }
+
+  const settings = getTrainerSettings();
+  const runtime = getTrainerRuntime();
+
+  if (!settings.enabled) {
+    dom.trainerStatus.textContent = "当前未启用本地微休息训练。";
+    return;
+  }
+
+  if (trainerSession?.active) {
+    dom.trainerStatus.textContent = `正在进行微休息训练：${trainerSession.pair[0]} / ${trainerSession.pair[1]}`;
+    return;
+  }
+
+  if (runtime.nextBreakAt) {
+    dom.trainerStatus.textContent = `已启用本地微休息训练。下一轮${formatRelativeMs(new Date(runtime.nextBreakAt).getTime() - Date.now())}。`;
+    return;
+  }
+
+  dom.trainerStatus.textContent = `已启用本地微休息训练。默认每 ${settings.intervalMinutes} 分钟来一轮。`;
 }
 
 function updateInstallUi() {
@@ -1055,6 +1177,192 @@ function restoreAppState() {
   }
 }
 
+function clearTrainerTimers() {
+  window.clearTimeout(trainerBreakTimerId);
+  window.clearInterval(trainerCountdownTimerId);
+  window.clearTimeout(trainerHintTimerId);
+  window.clearTimeout(trainerAnswerTimerId);
+  trainerBreakTimerId = null;
+  trainerCountdownTimerId = null;
+  trainerHintTimerId = null;
+  trainerAnswerTimerId = null;
+}
+
+function hideTrainerHintAndAnswer() {
+  dom.trainerHintBox.classList.add("hidden-section");
+  dom.trainerAnswerBox.classList.add("hidden-section");
+  dom.trainerHintText.textContent = "";
+  dom.trainerAnswerText.textContent = "";
+}
+
+function showTrainerHint() {
+  if (!trainerSession) {
+    return;
+  }
+
+  const hintText = trainerSession.hintCards.map((card) => card.text).join("\n");
+  dom.trainerHintText.textContent = hintText;
+  dom.trainerHintBox.classList.remove("hidden-section");
+}
+
+function showTrainerAnswer() {
+  if (!trainerSession) {
+    return;
+  }
+
+  const answerText = trainerSession.answerCards
+    .slice(0, 3)
+    .map((card) => `${card.title}：${card.text}`)
+    .join("\n\n");
+  dom.trainerAnswerText.textContent = answerText;
+  dom.trainerAnswerBox.classList.remove("hidden-section");
+}
+
+function scheduleNextTrainerBreak(delayMs) {
+  const settings = getTrainerSettings();
+
+  clearTrainerTimers();
+
+  if (!settings.enabled) {
+    setTrainerRuntime({
+      ...getTrainerRuntime(),
+      nextBreakAt: null
+    });
+    updateTrainerStatus();
+    return;
+  }
+
+  const nextBreakAt = new Date(Date.now() + delayMs).toISOString();
+  setTrainerRuntime({
+    ...getTrainerRuntime(),
+    nextBreakAt
+  });
+
+  trainerBreakTimerId = window.setTimeout(() => {
+    void startTrainerSession();
+  }, delayMs);
+
+  updateTrainerStatus();
+}
+
+function finishTrainerSession(nextDelayMs, statusMessage) {
+  const settings = getTrainerSettings();
+
+  window.clearInterval(trainerCountdownTimerId);
+  window.clearTimeout(trainerHintTimerId);
+  window.clearTimeout(trainerAnswerTimerId);
+  trainerCountdownTimerId = null;
+  trainerHintTimerId = null;
+  trainerAnswerTimerId = null;
+
+  dom.trainerOverlay.classList.add("hidden-overlay");
+  dom.trainerOverlay.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
+
+  trainerSession = null;
+
+  setTrainerRuntime({
+    ...getTrainerRuntime(),
+    lastCompletedAt: new Date().toISOString()
+  });
+
+  if (typeof nextDelayMs === "number") {
+    scheduleNextTrainerBreak(nextDelayMs);
+  } else if (settings.enabled) {
+    scheduleNextTrainerBreak(settings.intervalMinutes * 60 * 1000);
+  }
+
+  if (statusMessage) {
+    updateTrainerStatus(statusMessage);
+  }
+}
+
+async function startTrainerSession() {
+  const settings = getTrainerSettings();
+
+  await refreshVaultAssociationTerms();
+
+  const pair = pickAssociationPair();
+  const hintCards = buildLocalAssociationHintCards(pair);
+  const answerCards = buildLocalAssociationAnswerCards(pair);
+
+  trainerSession = {
+    active: true,
+    pair,
+    endsAt: Date.now() + settings.durationSeconds * 1000,
+    hintCards,
+    answerCards
+  };
+
+  setAssociationPair(pair);
+  hideTrainerHintAndAnswer();
+  dom.trainerWordA.textContent = pair[0];
+  dom.trainerWordB.textContent = pair[1];
+  dom.trainerCountdown.textContent = String(settings.durationSeconds);
+  dom.trainerOverlay.classList.remove("hidden-overlay");
+  dom.trainerOverlay.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+
+  updateTrainerStatus(`微休息训练开始：${pair[0]} / ${pair[1]}`);
+
+  trainerCountdownTimerId = window.setInterval(() => {
+    if (!trainerSession) {
+      return;
+    }
+
+    const remainingSeconds = Math.max(0, Math.ceil((trainerSession.endsAt - Date.now()) / 1000));
+    dom.trainerCountdown.textContent = String(remainingSeconds);
+
+    if (remainingSeconds <= 0 && !trainerSession.expired) {
+      trainerSession.expired = true;
+      window.clearInterval(trainerCountdownTimerId);
+      trainerCountdownTimerId = null;
+      showTrainerAnswer();
+      updateTrainerStatus("时间到了，可以看参考，也可以直接完成这一轮。");
+    }
+  }, 250);
+
+  if (settings.hintDelaySeconds > 0 && settings.hintDelaySeconds < settings.durationSeconds) {
+    trainerHintTimerId = window.setTimeout(() => {
+      showTrainerHint();
+    }, settings.hintDelaySeconds * 1000);
+  }
+
+  if (settings.answerDelaySeconds > 0 && settings.answerDelaySeconds < settings.durationSeconds) {
+    trainerAnswerTimerId = window.setTimeout(() => {
+      showTrainerAnswer();
+    }, settings.answerDelaySeconds * 1000);
+  }
+}
+
+function bootstrapTrainerSchedule() {
+  const settings = getTrainerSettings();
+  const runtime = getTrainerRuntime();
+
+  if (!settings.enabled) {
+    updateTrainerStatus();
+    return;
+  }
+
+  if (!runtime.nextBreakAt) {
+    scheduleNextTrainerBreak(settings.intervalMinutes * 60 * 1000);
+    return;
+  }
+
+  const remainingMs = new Date(runtime.nextBreakAt).getTime() - Date.now();
+
+  if (remainingMs <= 0) {
+    void startTrainerSession();
+    return;
+  }
+
+  trainerBreakTimerId = window.setTimeout(() => {
+    void startTrainerSession();
+  }, remainingMs);
+
+  updateTrainerStatus();
+}
+
 dom.configForm.addEventListener("submit", (event) => {
   event.preventDefault();
   setConfig({
@@ -1071,6 +1379,46 @@ dom.configForm.addEventListener("submit", (event) => {
 dom.clearConfig.addEventListener("click", () => {
   setConfig(DEFAULT_CONFIG);
   applyConfigToForm();
+});
+
+dom.trainerForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+
+  setTrainerSettings({
+    enabled: dom.trainerEnabled.checked,
+    intervalMinutes: Number(dom.trainerInterval.value),
+    durationSeconds: Number(dom.trainerDuration.value),
+    hintDelaySeconds: Number(dom.trainerHintDelay.value),
+    answerDelaySeconds: Number(dom.trainerAnswerDelay.value),
+    snoozeMinutes: Number(dom.trainerSnooze.value)
+  });
+
+  clearTrainerTimers();
+  bootstrapTrainerSchedule();
+});
+
+dom.trainerStartNow.addEventListener("click", async () => {
+  clearTrainerTimers();
+  await startTrainerSession();
+});
+
+dom.trainerStop.addEventListener("click", () => {
+  const settings = getTrainerSettings();
+  setTrainerSettings({
+    ...settings,
+    enabled: false
+  });
+  clearTrainerTimers();
+  dom.trainerOverlay.classList.add("hidden-overlay");
+  dom.trainerOverlay.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
+  trainerSession = null;
+  setTrainerRuntime({
+    ...getTrainerRuntime(),
+    nextBreakAt: null
+  });
+  applyTrainerSettingsToForm();
+  updateTrainerStatus("本地微休息训练已停止。");
 });
 
 dom.temperature.addEventListener("input", () => {
@@ -1094,6 +1442,24 @@ dom.installApp.addEventListener("click", async () => {
 
 dom.testConfig.addEventListener("click", async () => {
   await testModelConnection();
+});
+
+dom.trainerShowHint.addEventListener("click", () => {
+  showTrainerHint();
+});
+
+dom.trainerShowAnswer.addEventListener("click", () => {
+  showTrainerAnswer();
+});
+
+dom.trainerSnoozeAction.addEventListener("click", () => {
+  const settings = getTrainerSettings();
+  finishTrainerSession(settings.snoozeMinutes * 60 * 1000, `这一轮已推迟，${settings.snoozeMinutes} 分钟后再来。`);
+});
+
+dom.trainerComplete.addEventListener("click", () => {
+  const settings = getTrainerSettings();
+  finishTrainerSession(settings.intervalMinutes * 60 * 1000, "这一轮完成了，下一轮已经继续排上。");
 });
 
 dom.applyManualPair.addEventListener("click", () => {
@@ -1317,6 +1683,7 @@ dom.clearHistory.addEventListener("click", () => {
 });
 
 applyConfigToForm();
+applyTrainerSettingsToForm();
 renderFavorites();
 renderHistory();
 restoreAppState();
@@ -1325,6 +1692,7 @@ if (!getAppState().association?.source?.meta?.pair?.length) {
 } else {
   void refreshVaultAssociationTerms();
 }
+bootstrapTrainerSchedule();
 registerServiceWorker();
 updateInstallUi();
 
