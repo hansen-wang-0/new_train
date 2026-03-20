@@ -82,7 +82,8 @@ const associationPools = {
   values: [
     "自由", "体面", "秩序", "效率", "公平", "野心", "真诚", "稳定",
     "亲密", "尊严", "松弛感", "存在感"
-  ]
+  ],
+  vault: []
 };
 
 const associationPairPatterns = [
@@ -101,7 +102,13 @@ const associationPairPatterns = [
   ["states", "objects"],
   ["concepts", "concepts"],
   ["concepts", "emotions"],
-  ["systems", "values"]
+  ["systems", "values"],
+  ["vault", "objects"],
+  ["vault", "concepts"],
+  ["vault", "emotions"],
+  ["vault", "systems"],
+  ["vault", "values"],
+  ["vault", "states"]
 ];
 
 const dom = {
@@ -127,6 +134,7 @@ const dom = {
   manualWordA: document.querySelector("#manual-word-a"),
   manualWordB: document.querySelector("#manual-word-b"),
   applyManualPair: document.querySelector("#apply-manual-pair"),
+  associationSourceStatus: document.querySelector("#association-source-status"),
   associationInput: document.querySelector("#association-input"),
   associationHint: document.querySelector("#association-hint"),
   associationAnswer: document.querySelector("#association-answer"),
@@ -152,6 +160,7 @@ const currentSourceState = {
 
 let currentPair = pickAssociationPair();
 let deferredInstallPrompt = null;
+let vaultAssociationTerms = [];
 
 function readLocalStorage(key, fallback) {
   try {
@@ -466,6 +475,40 @@ function isAiEnabled() {
   return Boolean(config.enableAi && config.baseUrl && config.model && config.apiKey);
 }
 
+function updateAssociationSourceStatus(message) {
+  dom.associationSourceStatus.textContent = message;
+}
+
+async function refreshVaultAssociationTerms() {
+  try {
+    const response = await fetch("/api/obsidian-terms");
+    const data = await response.json();
+
+    if (!response.ok || !data.ok) {
+      associationPools.vault = [];
+      vaultAssociationTerms = [];
+      updateAssociationSourceStatus("当前没有读到 Obsidian Vault 词库，随机词会继续使用内置词池。");
+      return [];
+    }
+
+    vaultAssociationTerms = Array.isArray(data.terms) ? data.terms : [];
+    associationPools.vault = vaultAssociationTerms;
+
+    if (vaultAssociationTerms.length) {
+      updateAssociationSourceStatus(`已接入 Obsidian Vault 短词 ${vaultAssociationTerms.length} 个。每次换词时都会重新扫描一次你的双括号词汇。`);
+    } else {
+      updateAssociationSourceStatus("Obsidian Vault 已连接，但暂时没抓到符合长度规则的双括号短词。");
+    }
+
+    return vaultAssociationTerms;
+  } catch {
+    associationPools.vault = [];
+    vaultAssociationTerms = [];
+    updateAssociationSourceStatus("当前无法连接 Obsidian Vault 词库，随机词会继续使用内置词池。");
+    return [];
+  }
+}
+
 function pickAssociationSeed(category, exclude) {
   const pool = associationPools[category] || [];
   const filtered = pool.filter((item) => item !== exclude);
@@ -474,7 +517,23 @@ function pickAssociationSeed(category, exclude) {
 }
 
 function pickAssociationPair() {
-  const pattern = associationPairPatterns[Math.floor(Math.random() * associationPairPatterns.length)];
+  const availablePatterns = associationPairPatterns.filter(([firstCategory, secondCategory]) => {
+    const firstPool = associationPools[firstCategory] || [];
+    const secondPool = associationPools[secondCategory] || [];
+
+    if (!firstPool.length || !secondPool.length) {
+      return false;
+    }
+
+    if (firstCategory === secondCategory && firstPool.length < 2) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const patternSource = availablePatterns.length ? availablePatterns : [["objects", "concepts"]];
+  const pattern = patternSource[Math.floor(Math.random() * patternSource.length)];
   const first = pickAssociationSeed(pattern[0]);
   const second = pickAssociationSeed(pattern[1], first);
   const pair = [first, second];
@@ -508,7 +567,8 @@ function resetAssociationWorkspace() {
   setEmpty(dom.associationOutput, "先自己想，再看提示和参考。重点不是走箭头，而是把它们连成一句话、一个画面，或者一个很短的故事。");
 }
 
-function refreshAssociationPair() {
+async function refreshAssociationPair() {
+  await refreshVaultAssociationTerms();
   setAssociationPair(pickAssociationPair());
   resetAssociationWorkspace();
 }
@@ -1090,7 +1150,9 @@ dom.describeForm.addEventListener("submit", async (event) => {
   }
 });
 
-dom.refreshPair.addEventListener("click", refreshAssociationPair);
+dom.refreshPair.addEventListener("click", async () => {
+  await refreshAssociationPair();
+});
 
 dom.associationInput.addEventListener("input", () => {
   updateModuleState("association", {
@@ -1259,7 +1321,9 @@ renderFavorites();
 renderHistory();
 restoreAppState();
 if (!getAppState().association?.source?.meta?.pair?.length) {
-  refreshAssociationPair();
+  void refreshAssociationPair();
+} else {
+  void refreshVaultAssociationTerms();
 }
 registerServiceWorker();
 updateInstallUi();

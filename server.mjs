@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,6 +8,8 @@ const __dirname = path.dirname(__filename);
 const appDir = path.join(__dirname, "app");
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || "0.0.0.0";
+const obsidianVaultPath = process.env.OBSIDIAN_VAULT_PATH || "C:\\Users\\wangh\\Desktop\\Obsidian Vault";
+const maxVaultTermLength = Number(process.env.OBSIDIAN_MAX_TERM_LENGTH || 6);
 
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
@@ -32,6 +34,109 @@ function getContentType(filePath) {
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(payload));
+}
+
+function normalizeVaultTerm(rawTerm) {
+  const trimmed = String(rawTerm || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const aliasTerm = trimmed.includes("|") ? trimmed.split("|").pop() : trimmed;
+  const headingless = aliasTerm.split("#")[0].trim();
+  const plain = headingless.replace(/\.md$/i, "").trim();
+
+  if (!plain) {
+    return "";
+  }
+
+  if (plain.includes("/") || plain.includes("\\")) {
+    return "";
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(plain)) {
+    return "";
+  }
+
+  if (/^[\d\s\-_/.:]+$/.test(plain)) {
+    return "";
+  }
+
+  if (/[<>[\]{}]/.test(plain)) {
+    return "";
+  }
+
+  if (Array.from(plain).length > maxVaultTermLength) {
+    return "";
+  }
+
+  return plain;
+}
+
+async function collectMarkdownFiles(dirPath, collector = []) {
+  const entries = await readdir(dirPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+
+    if (entry.isDirectory()) {
+      await collectMarkdownFiles(fullPath, collector);
+      continue;
+    }
+
+    if (entry.isFile() && fullPath.endsWith(".md")) {
+      collector.push(fullPath);
+    }
+  }
+
+  return collector;
+}
+
+async function readVaultTerms() {
+  try {
+    const markdownFiles = await collectMarkdownFiles(obsidianVaultPath);
+    const counts = new Map();
+    const matchesPattern = /\[\[(.+?)\]\]/g;
+
+    for (const filePath of markdownFiles) {
+      const content = await readFile(filePath, "utf8");
+
+      for (const match of content.matchAll(matchesPattern)) {
+        const candidate = normalizeVaultTerm(match[1]);
+        if (!candidate) {
+          continue;
+        }
+
+        counts.set(candidate, (counts.get(candidate) || 0) + 1);
+      }
+    }
+
+    const terms = [...counts.entries()]
+      .sort((left, right) => {
+        if (right[1] !== left[1]) {
+          return right[1] - left[1];
+        }
+        return left[0].localeCompare(right[0], "zh-CN");
+      })
+      .map(([term]) => term);
+
+    return {
+      ok: true,
+      path: obsidianVaultPath,
+      totalFiles: markdownFiles.length,
+      totalTerms: terms.length,
+      terms
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      path: obsidianVaultPath,
+      totalFiles: 0,
+      totalTerms: 0,
+      terms: [],
+      error: error instanceof Error ? error.message : "Failed to read vault terms"
+    };
+  }
 }
 
 async function serveStatic(requestPath, response) {
@@ -115,6 +220,11 @@ async function handleGenerate(request, response) {
   }
 }
 
+async function handleVaultTerms(response) {
+  const payload = await readVaultTerms();
+  sendJson(response, 200, payload);
+}
+
 createServer(async (request, response) => {
   const url = new URL(request.url || "/", `http://${request.headers.host}`);
 
@@ -125,6 +235,11 @@ createServer(async (request, response) => {
 
   if (request.method === "POST" && url.pathname === "/api/generate") {
     await handleGenerate(request, response);
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/obsidian-terms") {
+    await handleVaultTerms(response);
     return;
   }
 
