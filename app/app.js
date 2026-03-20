@@ -675,6 +675,13 @@ async function refreshVaultAssociationTerms() {
     associationPools.vault = vaultAssociationTerms;
     vaultTermEntries = Array.isArray(data.entries) ? data.entries : [];
 
+    if (!Array.isArray(data.entries) && vaultAssociationTerms.length) {
+      updateAssociationSourceStatus("短词词库已接入，但词汇对应表需要新版本地服务支持。请重启 `node server.mjs`。");
+      updateVaultMapStatus("当前服务还在返回旧版词库结构。请先重启本地 `node server.mjs`，再使用搜索和笔记跳转。");
+      renderVaultTermEntries([]);
+      return vaultAssociationTerms;
+    }
+
     if (vaultAssociationTerms.length) {
       updateAssociationSourceStatus(`已接入 Obsidian Vault 短词 ${vaultAssociationTerms.length} 个。每次换词时都会重新扫描一次你的双括号词汇。`);
       updateVaultMapStatus(`已接入 ${vaultAssociationTerms.length} 个短词，来源于 ${data.vaultName || "Obsidian Vault"}。`);
