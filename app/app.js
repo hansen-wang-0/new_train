@@ -5,6 +5,15 @@ const STORAGE_KEYS = {
   state: "interesting-lab-state"
 };
 
+const DEFAULT_CONFIG = {
+  enableAi: false,
+  baseUrl: "https://api.deepseek.com",
+  model: "deepseek-chat",
+  apiKey: "",
+  temperature: 1.1,
+  customPrompt: ""
+};
+
 const describeLexicon = [
   {
     keywords: ["太阳", "阳光", "日头", "晒", "耀眼", "刺眼"],
@@ -44,6 +53,9 @@ const dom = {
   baseUrl: document.querySelector("#base-url"),
   modelName: document.querySelector("#model-name"),
   apiKey: document.querySelector("#api-key"),
+  temperature: document.querySelector("#temperature"),
+  temperatureValue: document.querySelector("#temperature-value"),
+  customPrompt: document.querySelector("#custom-prompt"),
   testConfig: document.querySelector("#test-config"),
   clearConfig: document.querySelector("#clear-config"),
   configStatus: document.querySelector("#config-status"),
@@ -55,6 +67,9 @@ const dom = {
   describeOutput: document.querySelector("#describe-output"),
   wordA: document.querySelector("#word-a"),
   wordB: document.querySelector("#word-b"),
+  manualWordA: document.querySelector("#manual-word-a"),
+  manualWordB: document.querySelector("#manual-word-b"),
+  applyManualPair: document.querySelector("#apply-manual-pair"),
   associationInput: document.querySelector("#association-input"),
   associationHint: document.querySelector("#association-hint"),
   associationAnswer: document.querySelector("#association-answer"),
@@ -95,12 +110,10 @@ function writeLocalStorage(key, value) {
 }
 
 function getConfig() {
-  return readLocalStorage(STORAGE_KEYS.config, {
-    enableAi: false,
-    baseUrl: "https://api.openai.com/v1",
-    model: "",
-    apiKey: ""
-  });
+  return {
+    ...DEFAULT_CONFIG,
+    ...readLocalStorage(STORAGE_KEYS.config, DEFAULT_CONFIG)
+  };
 }
 
 function setConfig(config) {
@@ -178,9 +191,12 @@ function deleteFavorite(id) {
 function applyConfigToForm() {
   const config = getConfig();
   dom.enableAi.checked = config.enableAi;
-  dom.baseUrl.value = config.baseUrl || "https://api.openai.com/v1";
-  dom.modelName.value = config.model || "";
+  dom.baseUrl.value = config.baseUrl || DEFAULT_CONFIG.baseUrl;
+  dom.modelName.value = config.model || DEFAULT_CONFIG.model;
   dom.apiKey.value = config.apiKey || "";
+  dom.temperature.value = String(config.temperature ?? DEFAULT_CONFIG.temperature);
+  dom.customPrompt.value = config.customPrompt || "";
+  syncTemperatureLabel(dom.temperature.value);
   updateConfigStatus();
 }
 
@@ -193,8 +209,12 @@ function updateConfigStatus(message) {
   const config = getConfig();
   const aiReady = config.enableAi && config.baseUrl && config.model && config.apiKey;
   dom.configStatus.textContent = aiReady
-    ? `模型增强已开启，当前模型：${config.model}`
-    : "当前为本地启发模式。你也可以填入模型设置，得到更发散的表达建议。";
+    ? `模型增强已开启，当前模型：${config.model}，temperature：${Number(config.temperature ?? DEFAULT_CONFIG.temperature).toFixed(1)}`
+    : "当前为本地启发模式。默认预填的是 DeepSeek 配置，你也可以继续微调 prompt 和 temperature。";
+}
+
+function syncTemperatureLabel(value) {
+  dom.temperatureValue.textContent = Number(value).toFixed(1);
 }
 
 function updateInstallUi() {
@@ -366,10 +386,19 @@ function pickAssociationPair() {
   return [first, second];
 }
 
-function refreshAssociationPair() {
-  currentPair = pickAssociationPair();
+function updateAssociationPairUi() {
   dom.wordA.textContent = currentPair[0];
   dom.wordB.textContent = currentPair[1];
+  dom.manualWordA.value = currentPair[0];
+  dom.manualWordB.value = currentPair[1];
+}
+
+function setAssociationPair(pair) {
+  currentPair = [pair[0], pair[1]];
+  updateAssociationPairUi();
+}
+
+function resetAssociationWorkspace() {
   dom.associationInput.value = "";
   currentSourceState.association = null;
   updateModuleState("association", {
@@ -377,6 +406,30 @@ function refreshAssociationPair() {
     cards: null
   });
   setEmpty(dom.associationOutput, "先自己想，再看提示和参考。重点不是走箭头，而是把它们连成一句话、一个画面，或者一个很短的故事。");
+}
+
+function refreshAssociationPair() {
+  setAssociationPair(pickAssociationPair());
+  resetAssociationWorkspace();
+}
+
+function applyManualAssociationPair() {
+  const first = dom.manualWordA.value.trim();
+  const second = dom.manualWordB.value.trim();
+
+  if (!first || !second) {
+    updateConfigStatus("先把两个词都填上，再切换到手动词组。");
+    return;
+  }
+
+  if (first === second) {
+    updateConfigStatus("两个词最好不要完全一样，这样联想空间会更大。");
+    return;
+  }
+
+  setAssociationPair([first, second]);
+  resetAssociationWorkspace();
+  updateConfigStatus(`已切换到手动词组：${first} / ${second}`);
 }
 
 function findLexicon(text) {
@@ -524,7 +577,7 @@ function buildLocalPerspectiveCards(input) {
   ];
 }
 
-async function callModel(messages, temperature = 0.9) {
+async function callModel(messages, temperature = Number(getConfig().temperature ?? DEFAULT_CONFIG.temperature)) {
   let response;
 
   try {
@@ -555,13 +608,22 @@ async function callModel(messages, temperature = 0.9) {
   return (data.text || "").trim();
 }
 
+function appendCustomPrompt(basePrompt) {
+  const customPrompt = getConfig().customPrompt?.trim();
+  if (!customPrompt) {
+    return basePrompt;
+  }
+
+  return `${basePrompt}\n\n额外偏好：${customPrompt}`;
+}
+
 async function requestAiCard(block) {
   const text = await callModel(
     [
       { role: "system", content: block.system },
-      { role: "user", content: block.user }
+      { role: "user", content: appendCustomPrompt(block.user) }
     ],
-    block.temperature ?? 0.9
+    block.temperature ?? Number(getConfig().temperature ?? DEFAULT_CONFIG.temperature)
   );
 
   return {
@@ -782,9 +844,7 @@ function restoreHistoryEntry(id) {
 
   if (entry.sourceKind === "association") {
     const pair = entry.sourceMeta?.pair || currentPair;
-    currentPair = pair;
-    dom.wordA.textContent = pair[0];
-    dom.wordB.textContent = pair[1];
+    setAssociationPair(pair);
     dom.associationInput.value = entry.sourceMeta?.attempt || "";
     const source = buildAssociationSource(pair, entry.sourceMeta?.attempt || "");
     currentSourceState.association = source;
@@ -818,9 +878,7 @@ function restoreAppState() {
   }
 
   if (state.association?.source?.meta?.pair?.length === 2) {
-    currentPair = state.association.source.meta.pair;
-    dom.wordA.textContent = currentPair[0];
-    dom.wordB.textContent = currentPair[1];
+    setAssociationPair(state.association.source.meta.pair);
     dom.associationInput.value = state.association.source.meta.attempt || "";
     currentSourceState.association = state.association.source;
     if (Array.isArray(state.association.cards) && state.association.cards.length) {
@@ -843,19 +901,20 @@ dom.configForm.addEventListener("submit", (event) => {
     enableAi: dom.enableAi.checked,
     baseUrl: dom.baseUrl.value.trim(),
     model: dom.modelName.value.trim(),
-    apiKey: dom.apiKey.value.trim()
+    apiKey: dom.apiKey.value.trim(),
+    temperature: Number(dom.temperature.value),
+    customPrompt: dom.customPrompt.value.trim()
   });
   updateConfigStatus();
 });
 
 dom.clearConfig.addEventListener("click", () => {
-  setConfig({
-    enableAi: false,
-    baseUrl: "https://api.openai.com/v1",
-    model: "",
-    apiKey: ""
-  });
+  setConfig(DEFAULT_CONFIG);
   applyConfigToForm();
+});
+
+dom.temperature.addEventListener("input", () => {
+  syncTemperatureLabel(dom.temperature.value);
 });
 
 dom.installApp.addEventListener("click", async () => {
@@ -875,6 +934,10 @@ dom.installApp.addEventListener("click", async () => {
 
 dom.testConfig.addEventListener("click", async () => {
   await testModelConnection();
+});
+
+dom.applyManualPair.addEventListener("click", () => {
+  applyManualAssociationPair();
 });
 
 dom.describeInput.addEventListener("input", () => {
@@ -1094,8 +1157,10 @@ dom.clearHistory.addEventListener("click", () => {
 applyConfigToForm();
 renderFavorites();
 renderHistory();
-refreshAssociationPair();
 restoreAppState();
+if (!getAppState().association?.source?.meta?.pair?.length) {
+  refreshAssociationPair();
+}
 registerServiceWorker();
 updateInstallUi();
 

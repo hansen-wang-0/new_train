@@ -199,6 +199,10 @@ h1 {
   gap: 14px;
 }
 
+.full-span {
+  grid-column: span 2;
+}
+
 .stack-form,
 label {
   display: flex;
@@ -247,6 +251,18 @@ textarea {
 .association-head {
   justify-content: space-between;
   margin-bottom: 14px;
+}
+
+.manual-pair-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+  align-items: end;
+}
+
+.manual-pair-grid .ghost-button {
+  height: 52px;
 }
 
 .primary-button,
@@ -415,6 +431,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .full-span {
+    grid-column: auto;
+  }
+
   .hero-copy {
     padding: 22px;
   }
@@ -447,6 +467,10 @@ textarea {
   .config-actions,
   .association-head {
     align-items: stretch;
+  }
+
+  .manual-pair-grid {
+    grid-template-columns: 1fr;
   }
 
   .primary-button,
