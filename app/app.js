@@ -52,75 +52,7 @@ const describeLexicon = [
   }
 ];
 
-const associationPools = {
-  objects: [
-    "牙刷", "地铁闸机", "窗帘", "台灯", "便利店收银台", "电梯", "耳机", "路灯",
-    "外卖袋", "工牌", "鱼缸", "保温杯", "楼梯", "闹钟", "鞋带", "键盘",
-    "雨伞", "毛衣", "月亮", "公交站牌", "冰箱", "口罩", "自动门", "探照灯"
-  ],
-  places: [
-    "写字楼", "出租屋", "医院走廊", "高铁站", "家长群", "直播间", "会议室", "夜路",
-    "商场洗手间", "便利店门口", "开放工位", "老小区"
-  ],
-  emotions: [
-    "焦虑", "羞耻感", "归属感", "心虚", "愤怒", "羡慕", "委屈", "松一口气",
-    "孤独", "厌倦", "嫉妒", "安全感"
-  ],
-  sensations: [
-    "钝感", "窒息感", "失重感", "发麻", "眩晕", "刺痛", "迟钝", "饱胀感",
-    "轻盈", "悬着", "卡住", "回暖"
-  ],
-  concepts: [
-    "父权制", "性别歧视", "阶层跃迁", "消费主义", "控制欲", "边界感", "规训", "偏见",
-    "沉默成本", "表演欲", "自我怀疑", "内卷", "人情", "面子", "算法推荐", "情绪价值"
-  ],
-  systems: [
-    "绩效考核", "亲密关系", "社交规则", "舆论场", "平台机制", "家庭结构", "职场礼貌", "流量逻辑",
-    "教育体系", "办公室政治", "身份认同", "向上社交"
-  ],
-  roles: [
-    "实习生", "母亲", "前任", "领导", "旁观者", "好学生", "出租车司机", "室友",
-    "陌生人", "女儿", "伴侣", "客服"
-  ],
-  actions: [
-    "等待", "逃跑", "解释", "讨好", "拒绝", "对齐", "拖延", "忍耐",
-    "切换", "围观", "复盘", "失控"
-  ],
-  states: [
-    "倦怠", "清醒", "断联", "拧巴", "上头", "麻木", "失语", "回避",
-    "松动", "停滞", "失衡", "过载"
-  ],
-  values: [
-    "自由", "体面", "秩序", "效率", "公平", "野心", "真诚", "稳定",
-    "亲密", "尊严", "松弛感", "存在感"
-  ],
-  vault: []
-};
-
-const associationPairPatterns = [
-  ["objects", "concepts"],
-  ["objects", "emotions"],
-  ["objects", "systems"],
-  ["places", "concepts"],
-  ["places", "states"],
-  ["roles", "systems"],
-  ["roles", "emotions"],
-  ["actions", "objects"],
-  ["actions", "concepts"],
-  ["sensations", "values"],
-  ["sensations", "systems"],
-  ["states", "values"],
-  ["states", "objects"],
-  ["concepts", "concepts"],
-  ["concepts", "emotions"],
-  ["systems", "values"],
-  ["vault", "objects"],
-  ["vault", "concepts"],
-  ["vault", "emotions"],
-  ["vault", "systems"],
-  ["vault", "values"],
-  ["vault", "states"]
-];
+const MIN_VAULT_PAIR_SIZE = 2;
 
 const dom = {
   configForm: document.querySelector("#config-form"),
@@ -156,6 +88,10 @@ const dom = {
   manualWordB: document.querySelector("#manual-word-b"),
   applyManualPair: document.querySelector("#apply-manual-pair"),
   associationSourceStatus: document.querySelector("#association-source-status"),
+  pairNoteATitle: document.querySelector("#pair-note-a-title"),
+  pairNoteAList: document.querySelector("#pair-note-a-list"),
+  pairNoteBTitle: document.querySelector("#pair-note-b-title"),
+  pairNoteBList: document.querySelector("#pair-note-b-list"),
   associationInput: document.querySelector("#association-input"),
   associationHint: document.querySelector("#association-hint"),
   associationAnswer: document.querySelector("#association-answer"),
@@ -610,6 +546,37 @@ function updateVaultMapStatus(message) {
   dom.vaultMapStatus.textContent = message;
 }
 
+function findVaultEntry(term) {
+  return vaultTermEntries.find((entry) => entry.term === term) || null;
+}
+
+function renderPairNoteList(container, titleElement, term) {
+  titleElement.textContent = `${term} 的关联笔记`;
+  const entry = findVaultEntry(term);
+
+  if (!entry || !entry.notes?.length) {
+    setEmpty(container, `还没有找到“${term}”对应的 Obsidian 笔记。`);
+    return;
+  }
+
+  container.classList.remove("empty-state");
+  container.innerHTML = "";
+
+  entry.notes.slice(0, 8).forEach((note) => {
+    const link = document.createElement("a");
+    link.className = "vault-note-link";
+    link.href = note.obsidianUrl;
+    link.textContent = `${note.path} ×${note.hits}`;
+    link.title = note.path;
+    container.appendChild(link);
+  });
+}
+
+function renderCurrentPairNotes() {
+  renderPairNoteList(dom.pairNoteAList, dom.pairNoteATitle, currentPair[0]);
+  renderPairNoteList(dom.pairNoteBList, dom.pairNoteBTitle, currentPair[1]);
+}
+
 function renderVaultTermEntries(entries = vaultTermEntries) {
   const keyword = dom.vaultTermSearch.value.trim().toLowerCase();
   const filtered = keyword
@@ -662,81 +629,61 @@ async function refreshVaultAssociationTerms() {
     const data = await response.json();
 
     if (!response.ok || !data.ok) {
-      associationPools.vault = [];
       vaultAssociationTerms = [];
       vaultTermEntries = [];
-      updateAssociationSourceStatus("当前没有读到 Obsidian Vault 词库，随机词会继续使用内置词池。");
+      updateAssociationSourceStatus("当前没有读到 Obsidian Vault 词库，所以现在无法随机出词。");
       updateVaultMapStatus("当前没有读到 Obsidian Vault 词汇对应表。");
       renderVaultTermEntries([]);
+      renderCurrentPairNotes();
       return [];
     }
 
     vaultAssociationTerms = Array.isArray(data.terms) ? data.terms : [];
-    associationPools.vault = vaultAssociationTerms;
     vaultTermEntries = Array.isArray(data.entries) ? data.entries : [];
 
     if (!Array.isArray(data.entries) && vaultAssociationTerms.length) {
       updateAssociationSourceStatus("短词词库已接入，但词汇对应表需要新版本地服务支持。请重启 `node server.mjs`。");
       updateVaultMapStatus("当前服务还在返回旧版词库结构。请先重启本地 `node server.mjs`，再使用搜索和笔记跳转。");
       renderVaultTermEntries([]);
+      renderCurrentPairNotes();
       return vaultAssociationTerms;
     }
 
     if (vaultAssociationTerms.length) {
-      updateAssociationSourceStatus(`已接入 Obsidian Vault 短词 ${vaultAssociationTerms.length} 个。每次换词时都会重新扫描一次你的双括号词汇。`);
+      updateAssociationSourceStatus(`已接入 Obsidian Vault 短词 ${vaultAssociationTerms.length} 个。随机双词现在完全来自你的 Vault。`);
       updateVaultMapStatus(`已接入 ${vaultAssociationTerms.length} 个短词，来源于 ${data.vaultName || "Obsidian Vault"}。`);
     } else {
-      updateAssociationSourceStatus("Obsidian Vault 已连接，但暂时没抓到符合长度规则的双括号短词。");
+      updateAssociationSourceStatus("Obsidian Vault 已连接，但暂时没抓到符合长度规则的双括号短词，所以现在无法随机出词。");
       updateVaultMapStatus("Obsidian Vault 已连接，但暂时没抓到符合规则的短词。");
     }
 
     renderVaultTermEntries(vaultTermEntries);
+    renderCurrentPairNotes();
     return vaultAssociationTerms;
   } catch {
-    associationPools.vault = [];
     vaultAssociationTerms = [];
     vaultTermEntries = [];
-    updateAssociationSourceStatus("当前无法连接 Obsidian Vault 词库，随机词会继续使用内置词池。");
+    updateAssociationSourceStatus("当前无法连接 Obsidian Vault 词库，所以现在无法随机出词。");
     updateVaultMapStatus("当前无法连接 Obsidian Vault 词汇对应表。");
     renderVaultTermEntries([]);
+    renderCurrentPairNotes();
     return [];
   }
 }
 
-function pickAssociationSeed(category, exclude) {
-  const pool = associationPools[category] || [];
-  const filtered = pool.filter((item) => item !== exclude);
-  const source = filtered.length ? filtered : pool;
-  return source[Math.floor(Math.random() * source.length)];
-}
-
 function pickAssociationPair() {
-  const availablePatterns = associationPairPatterns.filter(([firstCategory, secondCategory]) => {
-    const firstPool = associationPools[firstCategory] || [];
-    const secondPool = associationPools[secondCategory] || [];
-
-    if (!firstPool.length || !secondPool.length) {
-      return false;
-    }
-
-    if (firstCategory === secondCategory && firstPool.length < 2) {
-      return false;
-    }
-
-    return true;
-  });
-
-  const patternSource = availablePatterns.length ? availablePatterns : [["objects", "concepts"]];
-  const pattern = patternSource[Math.floor(Math.random() * patternSource.length)];
-  const first = pickAssociationSeed(pattern[0]);
-  const second = pickAssociationSeed(pattern[1], first);
-  const pair = [first, second];
-
-  if (Math.random() > 0.5) {
-    pair.reverse();
+  if (vaultAssociationTerms.length < MIN_VAULT_PAIR_SIZE) {
+    return ["词一", "词二"];
   }
 
-  return pair;
+  const firstIndex = Math.floor(Math.random() * vaultAssociationTerms.length);
+  let secondIndex = Math.floor(Math.random() * vaultAssociationTerms.length);
+
+  while (secondIndex === firstIndex) {
+    secondIndex = Math.floor(Math.random() * vaultAssociationTerms.length);
+  }
+
+  return [vaultAssociationTerms[firstIndex], vaultAssociationTerms[secondIndex]];
 }
 
 function updateAssociationPairUi() {
@@ -744,6 +691,7 @@ function updateAssociationPairUi() {
   dom.wordB.textContent = currentPair[1];
   dom.manualWordA.value = currentPair[0];
   dom.manualWordB.value = currentPair[1];
+  renderCurrentPairNotes();
 }
 
 function setAssociationPair(pair) {
@@ -783,7 +731,12 @@ function applyManualAssociationPair() {
 
   setAssociationPair([first, second]);
   resetAssociationWorkspace();
-  updateConfigStatus(`已切换到手动词组：${first} / ${second}`);
+  const firstKnown = Boolean(findVaultEntry(first));
+  const secondKnown = Boolean(findVaultEntry(second));
+  const knownText = firstKnown && secondKnown
+    ? "这两个词都在你的 Obsidian 词库里。"
+    : "已切换到手动词组；如果某个词不在 Obsidian 词库里，对应笔记区域会提示为空。";
+  updateConfigStatus(`已切换到手动词组：${first} / ${second}。${knownText}`);
 }
 
 function findLexicon(text) {

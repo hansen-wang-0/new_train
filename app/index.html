@@ -186,18 +186,37 @@
           <div class="manual-pair-grid">
             <label>
               <span>手动词 1</span>
-              <input id="manual-word-a" type="text" placeholder="例：牙刷" />
+              <input id="manual-word-a" type="text" placeholder="例：合理化" />
             </label>
             <label>
               <span>手动词 2</span>
-              <input id="manual-word-b" type="text" placeholder="例：地铁" />
+              <input id="manual-word-b" type="text" placeholder="例：公平" />
             </label>
             <button id="apply-manual-pair" class="ghost-button" type="button">使用手动词组</button>
           </div>
 
           <p id="association-source-status" class="small-status">
-            随机词会优先混搭本地词池；如果你是本地运行，还会动态抓取 Obsidian Vault 里的双括号短词。
+            随机词现在只来自 Obsidian Vault 里的双括号短词。
           </p>
+
+          <div class="pair-notes-grid">
+            <article class="pair-note-card">
+              <div class="pair-note-head">
+                <h3 id="pair-note-a-title">词一出处</h3>
+              </div>
+              <div id="pair-note-a-list" class="pair-note-list empty-state">
+                <p>这里会显示这个词关联的笔记。</p>
+              </div>
+            </article>
+            <article class="pair-note-card">
+              <div class="pair-note-head">
+                <h3 id="pair-note-b-title">词二出处</h3>
+              </div>
+              <div id="pair-note-b-list" class="pair-note-list empty-state">
+                <p>这里会显示这个词关联的笔记。</p>
+              </div>
+            </article>
+          </div>
 
           <label>
             <span>先写你自己的连接路径</span>
