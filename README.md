@@ -22,6 +22,7 @@
   - [`docs/evaluation/iteration-notes.md`](./docs/evaluation/iteration-notes.md)
   - [`docs/android-usage.md`](./docs/android-usage.md)
   - [`docs/deploy-public.md`](./docs/deploy-public.md)
+  - [`docs/manual-steps.md`](./docs/manual-steps.md)
 
 ## 如何运行
 
