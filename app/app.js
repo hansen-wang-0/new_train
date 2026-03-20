@@ -161,6 +161,10 @@ const dom = {
   associationAnswer: document.querySelector("#association-answer"),
   associationOutput: document.querySelector("#association-output"),
   refreshPair: document.querySelector("#refresh-pair"),
+  vaultTermSearch: document.querySelector("#vault-term-search"),
+  refreshVaultMap: document.querySelector("#refresh-vault-map"),
+  vaultMapStatus: document.querySelector("#vault-map-status"),
+  vaultMapOutput: document.querySelector("#vault-map-output"),
   perspectiveForm: document.querySelector("#perspective-form"),
   perspectiveInput: document.querySelector("#perspective-input"),
   perspectiveOutput: document.querySelector("#perspective-output"),
@@ -194,6 +198,7 @@ const currentSourceState = {
 let currentPair = pickAssociationPair();
 let deferredInstallPrompt = null;
 let vaultAssociationTerms = [];
+let vaultTermEntries = [];
 let trainerBreakTimerId = null;
 let trainerCountdownTimerId = null;
 let trainerHintTimerId = null;
@@ -601,6 +606,56 @@ function updateAssociationSourceStatus(message) {
   dom.associationSourceStatus.textContent = message;
 }
 
+function updateVaultMapStatus(message) {
+  dom.vaultMapStatus.textContent = message;
+}
+
+function renderVaultTermEntries(entries = vaultTermEntries) {
+  const keyword = dom.vaultTermSearch.value.trim().toLowerCase();
+  const filtered = keyword
+    ? entries.filter((entry) =>
+        entry.term.toLowerCase().includes(keyword) ||
+        entry.notes.some((note) => note.path.toLowerCase().includes(keyword))
+      )
+    : entries;
+
+  if (!filtered.length) {
+    setEmpty(dom.vaultMapOutput, keyword ? "没找到符合搜索条件的词。" : "这里会显示词汇与关联笔记。");
+    return;
+  }
+
+  dom.vaultMapOutput.classList.remove("empty-state");
+  dom.vaultMapOutput.innerHTML = "";
+
+  filtered.slice(0, 120).forEach((entry) => {
+    const card = document.createElement("article");
+    card.className = "vault-entry";
+
+    const notes = entry.notes
+      .slice(0, 8)
+      .map((note) => {
+        const link = document.createElement("a");
+        link.className = "vault-note-link";
+        link.href = note.obsidianUrl;
+        link.textContent = `${note.path} ×${note.hits}`;
+        link.title = note.path;
+        return link;
+      });
+
+    const head = document.createElement("div");
+    head.className = "vault-entry-head";
+    head.innerHTML = `<h3>${escapeHtml(entry.term)}</h3><span class="vault-entry-meta">共 ${entry.count} 次引用</span>`;
+
+    const noteList = document.createElement("div");
+    noteList.className = "vault-note-list";
+    notes.forEach((noteLink) => noteList.appendChild(noteLink));
+
+    card.appendChild(head);
+    card.appendChild(noteList);
+    dom.vaultMapOutput.appendChild(card);
+  });
+}
+
 async function refreshVaultAssociationTerms() {
   try {
     const response = await fetch("/api/obsidian-terms");
@@ -609,24 +664,34 @@ async function refreshVaultAssociationTerms() {
     if (!response.ok || !data.ok) {
       associationPools.vault = [];
       vaultAssociationTerms = [];
+      vaultTermEntries = [];
       updateAssociationSourceStatus("当前没有读到 Obsidian Vault 词库，随机词会继续使用内置词池。");
+      updateVaultMapStatus("当前没有读到 Obsidian Vault 词汇对应表。");
+      renderVaultTermEntries([]);
       return [];
     }
 
     vaultAssociationTerms = Array.isArray(data.terms) ? data.terms : [];
     associationPools.vault = vaultAssociationTerms;
+    vaultTermEntries = Array.isArray(data.entries) ? data.entries : [];
 
     if (vaultAssociationTerms.length) {
       updateAssociationSourceStatus(`已接入 Obsidian Vault 短词 ${vaultAssociationTerms.length} 个。每次换词时都会重新扫描一次你的双括号词汇。`);
+      updateVaultMapStatus(`已接入 ${vaultAssociationTerms.length} 个短词，来源于 ${data.vaultName || "Obsidian Vault"}。`);
     } else {
       updateAssociationSourceStatus("Obsidian Vault 已连接，但暂时没抓到符合长度规则的双括号短词。");
+      updateVaultMapStatus("Obsidian Vault 已连接，但暂时没抓到符合规则的短词。");
     }
 
+    renderVaultTermEntries(vaultTermEntries);
     return vaultAssociationTerms;
   } catch {
     associationPools.vault = [];
     vaultAssociationTerms = [];
+    vaultTermEntries = [];
     updateAssociationSourceStatus("当前无法连接 Obsidian Vault 词库，随机词会继续使用内置词池。");
+    updateVaultMapStatus("当前无法连接 Obsidian Vault 词汇对应表。");
+    renderVaultTermEntries([]);
     return [];
   }
 }
@@ -1287,6 +1352,7 @@ async function startTrainerSession() {
   const answerCards = buildLocalAssociationAnswerCards(pair);
 
   trainerSession = {
+    id: crypto.randomUUID(),
     active: true,
     pair,
     endsAt: Date.now() + settings.durationSeconds * 1000,
@@ -1332,6 +1398,36 @@ async function startTrainerSession() {
     trainerAnswerTimerId = window.setTimeout(() => {
       showTrainerAnswer();
     }, settings.answerDelaySeconds * 1000);
+  }
+
+  if (isAiEnabled()) {
+    void enhanceTrainerSessionWithAi(trainerSession.id, pair, hintCards, answerCards);
+  }
+}
+
+async function enhanceTrainerSessionWithAi(sessionId, pair, fallbackHintCards, fallbackAnswerCards) {
+  try {
+    const [hintCards, answerCards] = await Promise.all([
+      generateFromBlueprint(getAssociationHintBlueprint(pair, ""), fallbackHintCards),
+      generateFromBlueprint(getAssociationBlueprint(pair, ""), fallbackAnswerCards)
+    ]);
+
+    if (!trainerSession || trainerSession.id !== sessionId) {
+      return;
+    }
+
+    trainerSession.hintCards = hintCards;
+    trainerSession.answerCards = answerCards;
+
+    if (!dom.trainerHintBox.classList.contains("hidden-section")) {
+      showTrainerHint();
+    }
+
+    if (!dom.trainerAnswerBox.classList.contains("hidden-section")) {
+      showTrainerAnswer();
+    }
+  } catch {
+    // Keep local fallback silently for the trainer overlay.
   }
 }
 
@@ -1518,6 +1614,15 @@ dom.describeForm.addEventListener("submit", async (event) => {
 
 dom.refreshPair.addEventListener("click", async () => {
   await refreshAssociationPair();
+});
+
+dom.vaultTermSearch.addEventListener("input", () => {
+  renderVaultTermEntries(vaultTermEntries);
+});
+
+dom.refreshVaultMap.addEventListener("click", async () => {
+  updateVaultMapStatus("正在刷新 Obsidian 词汇对应表...");
+  await refreshVaultAssociationTerms();
 });
 
 dom.associationInput.addEventListener("input", () => {

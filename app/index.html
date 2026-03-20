@@ -254,6 +254,28 @@
 
         <section class="panel">
           <div class="panel-head">
+            <h2>Obsidian 词汇对应表</h2>
+            <p>这里会列出你 Vault 里抓到的双括号短词，以及它们分别出现在哪些笔记里。点笔记名就能跳回对应笔记。</p>
+          </div>
+
+          <div class="manual-pair-grid">
+            <label>
+              <span>搜索词汇</span>
+              <input id="vault-term-search" type="text" placeholder="例：合理化 / 梗 / 公平" />
+            </label>
+            <div class="form-actions">
+              <button id="refresh-vault-map" class="ghost-button" type="button">刷新对应表</button>
+            </div>
+          </div>
+
+          <p id="vault-map-status" class="small-status">正在准备词汇对应表。</p>
+          <div id="vault-map-output" class="history-list empty-state">
+            <p>这里会显示词汇与关联笔记。</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
             <h2>历史记录</h2>
             <p>每一次查询都会留痕。刷新之后，你的最近输入和结果也会自动恢复。</p>
           </div>

@@ -9,6 +9,7 @@ const appDir = path.join(__dirname, "app");
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || "0.0.0.0";
 const obsidianVaultPath = process.env.OBSIDIAN_VAULT_PATH || "C:\\Users\\wangh\\Desktop\\Obsidian Vault";
+const obsidianVaultName = path.basename(obsidianVaultPath);
 const maxVaultTermLength = Number(process.env.OBSIDIAN_MAX_TERM_LENGTH || 6);
 
 const mimeTypes = {
@@ -95,11 +96,12 @@ async function collectMarkdownFiles(dirPath, collector = []) {
 async function readVaultTerms() {
   try {
     const markdownFiles = await collectMarkdownFiles(obsidianVaultPath);
-    const counts = new Map();
+    const entries = new Map();
     const matchesPattern = /\[\[(.+?)\]\]/g;
 
     for (const filePath of markdownFiles) {
       const content = await readFile(filePath, "utf8");
+      const relativePath = path.relative(obsidianVaultPath, filePath).replaceAll("\\", "/");
 
       for (const match of content.matchAll(matchesPattern)) {
         const candidate = normalizeVaultTerm(match[1]);
@@ -107,33 +109,64 @@ async function readVaultTerms() {
           continue;
         }
 
-        counts.set(candidate, (counts.get(candidate) || 0) + 1);
+        if (!entries.has(candidate)) {
+          entries.set(candidate, {
+            term: candidate,
+            count: 0,
+            notes: new Map()
+          });
+        }
+
+        const entry = entries.get(candidate);
+        entry.count += 1;
+        entry.notes.set(relativePath, (entry.notes.get(relativePath) || 0) + 1);
       }
     }
 
-    const terms = [...counts.entries()]
+    const entryList = [...entries.values()]
       .sort((left, right) => {
-        if (right[1] !== left[1]) {
-          return right[1] - left[1];
+        if (right.count !== left.count) {
+          return right.count - left.count;
         }
-        return left[0].localeCompare(right[0], "zh-CN");
+        return left.term.localeCompare(right.term, "zh-CN");
       })
-      .map(([term]) => term);
+      .map((entry) => ({
+        term: entry.term,
+        count: entry.count,
+        notes: [...entry.notes.entries()]
+          .sort((left, right) => {
+            if (right[1] !== left[1]) {
+              return right[1] - left[1];
+            }
+            return left[0].localeCompare(right[0], "zh-CN");
+          })
+          .map(([notePath, hits]) => ({
+            path: notePath,
+            hits,
+            obsidianUrl: `obsidian://open?vault=${encodeURIComponent(obsidianVaultName)}&file=${encodeURIComponent(notePath)}`
+          }))
+      }));
+
+    const terms = entryList.map((entry) => entry.term);
 
     return {
       ok: true,
       path: obsidianVaultPath,
+      vaultName: obsidianVaultName,
       totalFiles: markdownFiles.length,
       totalTerms: terms.length,
-      terms
+      terms,
+      entries: entryList
     };
   } catch (error) {
     return {
       ok: false,
       path: obsidianVaultPath,
+      vaultName: obsidianVaultName,
       totalFiles: 0,
       totalTerms: 0,
       terms: [],
+      entries: [],
       error: error instanceof Error ? error.message : "Failed to read vault terms"
     };
   }
