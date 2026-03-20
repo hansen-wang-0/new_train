@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#bb5a2a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>有趣训练场</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="glow glow-one"></div>
+      <div class="glow glow-two"></div>
+
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Interesting Practice Lab</p>
+          <h1>有趣训练场</h1>
+          <p class="hero-text">
+            这不是替你说话的工具，而是一套把“观察、联想、改写、复盘”练成习惯的小系统。
+          </p>
+        </div>
+
+        <div class="status-card">
+          <p class="status-label">今日练习</p>
+          <ul class="ritual-list">
+            <li>记录 3 个小瞬间</li>
+            <li>选 1 个瞬间做视角改写</li>
+            <li>练 1 组双词联想</li>
+            <li>收藏 1 句你真心想学的表达</li>
+          </ul>
+          <div class="app-actions">
+            <button type="button" id="install-app" class="primary-button hidden-button">安装到手机</button>
+            <p id="install-tip" class="small-status install-tip">安卓上可通过 Chrome 的“添加到主屏幕”安装。</p>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel config-panel">
+          <div class="panel-head">
+            <h2>模式设置</h2>
+            <p>默认用本地启发模式。填入模型配置后，可以得到更丰富的生成结果。</p>
+          </div>
+
+          <div class="safety-note">
+            <strong>公网安全模式：</strong>
+            这套网页适合部署成“每个人自己填自己的 API Key”。
+            你的 Key 不会写进代码仓库，也不会自动共享给别的访问者。
+          </div>
+
+          <form id="config-form" class="grid-form">
+            <label>
+              <span>启用模型增强</span>
+              <input id="enable-ai" type="checkbox" />
+            </label>
+            <label>
+              <span>Base URL</span>
+              <input id="base-url" type="text" placeholder="https://api.openai.com/v1" />
+            </label>
+            <label>
+              <span>Model</span>
+              <input id="model-name" type="text" placeholder="gpt-4.1-mini / gpt-5-mini" />
+            </label>
+            <label>
+              <span>API Key</span>
+              <input id="api-key" type="password" placeholder="sk-..." />
+            </label>
+
+            <div class="config-actions">
+              <button type="submit" class="primary-button">保存设置</button>
+              <button type="button" id="test-config" class="ghost-button">测试连接</button>
+              <button type="button" id="clear-config" class="ghost-button">清空设置</button>
+            </div>
+          </form>
+
+          <p id="config-status" class="small-status">当前为本地启发模式。</p>
+          <p class="small-status">
+            说明：这里填入的 Key 只保存在当前浏览器本地。别人打开同一个公网网址时，需要填他们自己的 Key。
+          </p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>描写扩展器</h2>
+            <p>把一句平铺直叙的话，改写成更具体、更有画面、更像“你自己”的表达。</p>
+          </div>
+
+          <form id="describe-form" class="stack-form">
+            <label>
+              <span>你现在想到的原句</span>
+              <textarea id="describe-input" rows="4" placeholder="例：太阳很亮，很耀眼。"></textarea>
+            </label>
+
+            <label>
+              <span>你想偏向的风格</span>
+              <select id="describe-tone">
+                <option value="balanced">平衡一点</option>
+                <option value="visual">更有画面</option>
+                <option value="humor">更轻一点</option>
+                <option value="poetic">更柔一点</option>
+                <option value="chatty">更口语一点</option>
+              </select>
+            </label>
+
+            <div class="form-actions">
+              <button type="submit" class="primary-button">开始扩展</button>
+            </div>
+          </form>
+
+          <div id="describe-output" class="result-grid empty-state">
+            <p>这里会出现近义词、比喻、拟人和不同风格的改写结果。</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>联想短路器</h2>
+            <p>用两个不相干的词，练习把它们连成一句话、一个比喻，或者一个很短的小故事。</p>
+          </div>
+
+          <div class="association-head">
+            <div class="word-pair">
+              <span id="word-a" class="word-chip">灯</span>
+                <span class="word-separator">和</span>
+              <span id="word-b" class="word-chip">地铁</span>
+            </div>
+            <button id="refresh-pair" class="ghost-button" type="button">换一组词</button>
+          </div>
+
+          <label>
+            <span>先写你自己的连接路径</span>
+            <textarea id="association-input" rows="4" placeholder="例：地铁里的到站提示灯，像每天把人从一个状态切到另一个状态。"></textarea>
+          </label>
+
+          <div class="form-actions">
+            <button id="association-hint" class="ghost-button" type="button">给我提示</button>
+            <button id="association-answer" class="primary-button" type="button">看参考答案</button>
+          </div>
+
+          <div id="association-output" class="result-grid empty-state">
+            <p>先自己想，再看提示和答案。不是求唯一正确，而是求你能不能迅速搭桥。</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>视角转换器</h2>
+            <p>同一件事，换个视角就会换一套说法。</p>
+          </div>
+
+          <form id="perspective-form" class="stack-form">
+            <label>
+              <span>写一件今天发生的小事</span>
+              <textarea id="perspective-input" rows="4" placeholder="例：我今天开会时脑子很空白，但还是一直点头。"></textarea>
+            </label>
+
+            <div class="form-actions">
+              <button type="submit" class="primary-button">生成新视角</button>
+            </div>
+          </form>
+
+          <div id="perspective-output" class="result-grid empty-state">
+            <p>这里会从小孩、旁观者、导演、喜剧人等角度帮你重写这件事。</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>收藏与复盘</h2>
+            <p>把原句和改写一起留下来。复盘不是只看结果，而是看它是从哪一句直白的话长出来的。</p>
+          </div>
+
+          <div class="form-actions">
+            <button id="export-favorites" class="ghost-button" type="button">导出收藏</button>
+            <button id="clear-favorites" class="ghost-button" type="button">清空收藏</button>
+          </div>
+
+          <div id="favorites-output" class="favorites-list empty-state">
+            <p>你收藏的句子会出现在这里。</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>历史记录</h2>
+            <p>每一次查询都会留痕。刷新之后，你的最近输入和结果也会自动恢复。</p>
+          </div>
+
+          <div class="form-actions">
+            <button id="export-history" class="ghost-button" type="button">导出历史</button>
+            <button id="clear-history" class="ghost-button" type="button">清空历史</button>
+          </div>
+
+          <div id="history-output" class="history-list empty-state">
+            <p>你每次生成的结果会出现在这里。</p>
+          </div>
+        </section>
+
+        <section class="panel secondary-panel">
+          <div class="panel-head">
+            <h2>默认练法</h2>
+            <p>如果你明天只想快速上手，就按这个顺序来。</p>
+          </div>
+
+          <ol class="routine-steps">
+            <li>先在“描写扩展器”里输入一句你最常见的直白表达。</li>
+            <li>挑 1 句你喜欢的改写，存进收藏。</li>
+            <li>做 1 次“联想短路器”，优先练一句话、一个比喻、一个小故事。</li>
+            <li>用“视角转换器”重写今天一件很小的事。</li>
+            <li>睡前或起床后翻一次收藏，让它变成你自己的语言肌肉。</li>
+          </ol>
+        </section>
+      </main>
+    </div>
+
+    <template id="result-card-template">
+      <article class="result-card">
+        <div class="result-card-head">
+          <h3></h3>
+          <button type="button" class="save-chip">收藏</button>
+        </div>
+        <p></p>
+      </article>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

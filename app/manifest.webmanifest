@@ -1,0 +1,26 @@
+{
+  "name": "有趣训练场",
+  "short_name": "有趣训练场",
+  "description": "一个在手机上也能随手练观察、联想和表达的训练器。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f0e6",
+  "theme_color": "#bb5a2a",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

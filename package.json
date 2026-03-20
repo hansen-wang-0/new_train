@@ -1,0 +1,13 @@
+{
+  "name": "interesting-practice-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "evaluate": "node scripts/evaluate-training.mjs"
+  },
+  "dependencies": {
+    "localtunnel": "^2.0.2"
+  }
+}
