@@ -109,15 +109,49 @@ function writeLocalStorage(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-function getConfig() {
-  return {
+function normalizeConfig(config) {
+  const next = {
     ...DEFAULT_CONFIG,
-    ...readLocalStorage(STORAGE_KEYS.config, DEFAULT_CONFIG)
+    ...(config || {})
   };
+
+  const legacyBaseUrls = [
+    "https://api.openai.com",
+    "https://api.openai.com/v1"
+  ];
+
+  if (!next.baseUrl || legacyBaseUrls.includes(next.baseUrl.trim())) {
+    next.baseUrl = DEFAULT_CONFIG.baseUrl;
+  }
+
+  if (!next.model || next.model.trim() === "") {
+    next.model = DEFAULT_CONFIG.model;
+  }
+
+  if (typeof next.temperature !== "number" || Number.isNaN(next.temperature)) {
+    next.temperature = DEFAULT_CONFIG.temperature;
+  }
+
+  if (typeof next.customPrompt !== "string") {
+    next.customPrompt = DEFAULT_CONFIG.customPrompt;
+  }
+
+  return next;
+}
+
+function getConfig() {
+  const stored = readLocalStorage(STORAGE_KEYS.config, DEFAULT_CONFIG);
+  const normalized = normalizeConfig(stored);
+
+  if (JSON.stringify(stored) !== JSON.stringify(normalized)) {
+    writeLocalStorage(STORAGE_KEYS.config, normalized);
+  }
+
+  return normalized;
 }
 
 function setConfig(config) {
-  writeLocalStorage(STORAGE_KEYS.config, config);
+  writeLocalStorage(STORAGE_KEYS.config, normalizeConfig(config));
 }
 
 function getFavorites() {
